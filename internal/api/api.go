@@ -1,12 +1,15 @@
 package api
 
 import (
-	"encoding/json"
+	"fmt"
 	"net/http"
 
+	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
+	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/chalfel/chi-auth-0/internal/data"
 	"github.com/chalfel/chi-auth-0/pkg/db"
 	"github.com/chalfel/chi-auth-0/pkg/exceptions"
+	"github.com/chalfel/chi-auth-0/pkg/jwt"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -26,11 +29,12 @@ func NewApi(db *db.Db, router *chi.Mux) *App {
 }
 
 func (a *App) RegisterRoutes() {
-
+	authMiddleware := jwt.EnsureValidToken()
 	a.router.Get("/", a.Status)
+	a.router.Options("/", func(w http.ResponseWriter, r *http.Request) {})
 
-	a.router.Route("/user", func(r chi.Router) {
-		r.Post("/register", errorHandler(a.RegisterUser))
+	a.router.Route("/auth", func(r chi.Router) {
+		r.With(authMiddleware).Post("/callback/", errorHandler(a.AuthCallback))
 	})
 
 }
@@ -52,31 +56,23 @@ func (a *App) Status(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "ok"}`))
 }
 
-func (a *App) RegisterUser(w http.ResponseWriter, r *http.Request) (Response, error) {
-	params := RegisterUserParams{}
-	resp := Response{}
+func (a *App) AuthCallback(w http.ResponseWriter, r *http.Request) error {
+	fmt.Println("#######################")
+	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		return resp, err
-	}
-
-	if err := params.Validate(); err != nil {
-		return resp, err
-	}
-
-	sql := `INSERT INTO users (id, provider_id) VALUES ($1, $2)`
+	// sql := `INSERT INTO users (id, provider_id) VALUES ($1, $2)`
 
 	user := data.User{
 		ID:         uuid.NewString(),
-		ProviderID: params.ProviderID,
+		ProviderID: claims.RegisteredClaims.Subject,
 	}
 
-	if err := a.db.Exec(r.Context(), sql, user.ID, user.ProviderID); err != nil {
-		return resp, err
-	}
+	// if err := a.db.Exec(r.Context(), sql, user.ID, user.ProviderID); err != nil {
+	// 	return err
+	// }
+	fmt.Printf("%+v\n", user)
 
-	resp.StatusCode = http.StatusCreated
-	resp.Data = user
-
-	return resp, nil
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(`{"message": "ok"}`))
+	return nil
 }

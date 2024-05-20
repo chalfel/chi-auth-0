@@ -3,16 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/chalfel/chi-auth-0/pkg/exceptions"
 )
 
-type Response struct {
-	StatusCode int
-	Data       any
-}
-type InternalHandler func(w http.ResponseWriter, r *http.Request) (Response, error)
+type InternalHandler func(w http.ResponseWriter, r *http.Request) error
 
 type ErrorResponse struct {
 	Message    string `json:"message"`
@@ -21,7 +18,7 @@ type ErrorResponse struct {
 
 func errorHandler(cb InternalHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp, err := cb(w, r)
+		err := cb(w, r)
 		if err != nil {
 			var errorBody any
 			var status int
@@ -45,19 +42,11 @@ func errorHandler(cb InternalHandler) http.HandlerFunc {
 				return
 			}
 
+			fmt.Println(err)
 			w.WriteHeader(status)
 			w.Write(body)
 			return
 		}
 
-		body, err := json.Marshal(resp.Data)
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(resp.StatusCode)
-		w.Write(body)
 	})
 }
